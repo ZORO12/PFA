@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  HR
+  CANDIDAT
+}
+
+model User {
+  id             Int           @id @default(autoincrement())
+  email          String        @unique
+  password       String
+  firstName      String?
+  lastName       String?
+  role           Role          @default(CANDIDAT)
+
+  // --- LOGIQUE DE DÉPARTEMENT ---
+  // Un RH est affecté à une catégorie (Département)
+  assignedCategoryId Int?
+  assignedCategory   Category?   @relation(fields: [assignedCategoryId], references: [id])
+
+  // --- CV LOGIC ---
+  // On stocke le chemin local (ex: "uploads/CVs/cv-123.pdf")
+  curriculum_vitae String?     
+
+  // --- HIERARCHY LOGIC ---
+  adminId        Int?
+  admin          User?         @relation("AdminToHR", fields: [adminId], references: [id])
+  managedHrs     User[]        @relation("AdminToHR")
+
+  companyId      Int?
+  company        Company?      @relation(fields: [companyId], references: [id])
+
+  // --- RELATIONS ---
+  jobsCreated    Job[]         
+  applications   Application[] 
+  savedJobs      SavedJob[]    
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([adminId])
+}
+
+model Company {
+  id          Int      @id @default(autoincrement())
+  name        String
+  logo        String?
+  description String?  @db.Text
+  website     String?
+  location    String?
+
+  // ✅ New fields
+  foundedYear Int?       
+  size        Int?       
+  tags        String?   
+  linkedin    String?    
+  twitter     String?    
+  github      String?    
+
+  users       User[]
+  jobs        Job[]
+
+  createdAt   DateTime @default(now())
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  jobs  Job[]
+  users User[]
+}
+
+model Job {
+  id           Int           @id @default(autoincrement())
+  title        String
+  description  String        @db.Text
+  location     String?
+  salary       String?
+  isActive     Boolean       @default(true)
+  
+  // Who posted it? (Admin or HR)
+  authorId     Int
+  author       User          @relation(fields: [authorId], references: [id])
+  
+  // Which company brand is it for?
+  companyId    Int
+  company      Company       @relation(fields: [companyId], references: [id])
+  
+  // Industry classification
+  categoryId   Int
+  category     Category      @relation(fields: [categoryId], references: [id])
+  
+  applications Application[]
+  savedBy      SavedJob[]
+  
+  createdAt    DateTime      @default(now())
+}
+
+model Application {
+  id          Int      @id @default(autoincrement())
+  jobId       Int
+  candidateId Int
+  cvUrl       String   // Storage link to the PDF
+  status      String   @default("pending") // pending, reviewed, accepted, rejected
+  
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate   User     @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  
+  appliedAt   DateTime @default(now())
+}
+
+model SavedJob {
+  userId Int
+  jobId  Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job    Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+}
